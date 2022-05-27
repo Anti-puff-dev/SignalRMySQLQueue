@@ -37,7 +37,7 @@ namespace Spec
         {
             DataSet _ds = null;
 
-            Query(query, parms, "https://dbhub.lifequery.org/dbqueue", Guid.NewGuid().ToString(), ((DataSet ds) =>
+            Query(query, parms, "https://localhost:44362/dbqueue", Guid.NewGuid().ToString(), ((DataSet ds) =>
             {
                 _ds = ds;
                 return true;
