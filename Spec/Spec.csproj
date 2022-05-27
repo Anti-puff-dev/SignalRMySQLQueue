@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="1.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MySQL">
+      <HintPath>..\..\MySQL\MySQL\bin\Release\netcoreapp2.1\MySQL.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

@@ -5,19 +5,45 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace SignalRMySQLQueue
 {
     public class Startup
     {
-        // This method gets called by the runtime. Use this method to add services to the container.
-        // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
-        public void ConfigureServices(IServiceCollection services)
+        readonly string MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
+
+        public Startup(IConfiguration configuration)
         {
+            Configuration = configuration;
         }
 
-        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
+        public IConfiguration Configuration { get; }
+
+        public void ConfigureServices(IServiceCollection services)
+        {
+            services.AddCors(options =>
+            {
+                options.AddPolicy(name: MyAllowSpecificOrigins,
+                                  builder =>
+                                  {
+                                      builder.WithOrigins(
+                                            null,
+                                            "*",
+                                            "https://web.postman.co/",
+                                            "https://localhost:44306/");
+                                  });
+            });
+            services.AddSignalR();
+
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            MySQL.DbConnection.ConnString = ConfigurationExtensions.GetConnectionString(Configuration, "DefaultConnectionString");
+            MySQL.DbConnection.CacheConnString = ConfigurationExtensions.GetConnectionString(Configuration, "CacheConnectionString");
+            Hubs.DbQueueConfig.ThreadCount = Convert.ToInt32(ConfigurationExtensions.GetConnectionString(Configuration, "DbQueueThreadCount"));
+            Hubs.DbQueueConfig.MaxConnections = Convert.ToInt32(ConfigurationExtensions.GetConnectionString(Configuration, "DbQueueMaxConnections"));
+        }
+
         public void Configure(IApplicationBuilder app, IHostingEnvironment env)
         {
             if (env.IsDevelopment())
@@ -25,9 +51,17 @@ namespace SignalRMySQLQueue
                 app.UseDeveloperExceptionPage();
             }
 
-            app.Run(async (context) =>
+            app.UseCors(builder =>
             {
-                await context.Response.WriteAsync("Hello World!");
+                builder.AllowAnyHeader();
+                builder.AllowAnyMethod();
+                builder.SetIsOriginAllowed(origin => true);
+                builder.AllowCredentials();
+            });
+
+            app.UseSignalR(routes =>
+            {
+                routes.MapHub<Hubs.DbQueue>("/dbqueue");
             });
         }
     }
