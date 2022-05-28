@@ -37,7 +37,7 @@ namespace Spec
         {
             DataSet _ds = null;
 
-            Query(query, parms, "https://localhost:44362/dbqueue", Guid.NewGuid().ToString(), ((DataSet ds) =>
+            Query(query, parms, "https://dbhub.lifequery.org/dbqueue", Guid.NewGuid().ToString(), ((DataSet ds) =>
             {
                 _ds = ds;
                 return true;
@@ -107,7 +107,7 @@ namespace Spec
             try
             {
                 connection.StartAsync();
-                connection.InvokeAsync("Connect", Guid.NewGuid());
+                connection.InvokeAsync("Connect", Guid.NewGuid(), "ab53-0ksl-ahfa-dnsh-34rs-92ds");
             }
             catch (Exception err) { }
 

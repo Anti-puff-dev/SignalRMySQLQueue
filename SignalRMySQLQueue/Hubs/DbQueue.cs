@@ -18,9 +18,18 @@ namespace SignalRMySQLQueue.Hubs
     }
 
 
+    public class Client : Object
+    {
+        public IHubCallerClients Clients { get; set; }
+        public Session Session { get; set; }
+    }
+
+
+
 
     public class DbQueue : Hub
     {
+        static string authtoken = "ab53-0ksl-ahfa-dnsh-34rs-92ds";
         static int thread_count = DbQueueConfig.ThreadCount;
         static int max_connections = DbQueueConfig.MaxConnections;
         static ThreadsManager.Functions tm = new ThreadsManager.Functions(thread_count);
@@ -30,6 +39,7 @@ namespace SignalRMySQLQueue.Hubs
         static List<Queue> Queue = new List<Queue>();
         static long idleTimeout = 5000;
 
+
         #region Connections
         public override async Task OnConnectedAsync()
         {
@@ -37,7 +47,7 @@ namespace SignalRMySQLQueue.Hubs
             feature.OnHeartbeat(context => {
                 for (int i = ConnectedSessions.Count - 1; i >= 0; i--)
                 {
-                    if (DateTimeOffset.Now.ToUnixTimeMilliseconds() - ConnectedSessions[i].Time > idleTimeout)
+                    if (DateTimeOffset.Now.ToUnixTimeMilliseconds() - ConnectedSessions[i].Time > idleTimeout && ConnectedSessions[i].Finished && ConnectedSessions[i].Disposable)
                     {
                         ConnectedSessions[i].Context.Abort();
                         ConnectedSessions.Remove(ConnectedSessions[i]);
@@ -48,11 +58,11 @@ namespace SignalRMySQLQueue.Hubs
         }
 
 
-        public async Task Connect(string SessionId)
+        public async Task Connect(string SessionId, string token)
         {
-            if (ConnectedSessions.Count() >= max_connections)
+            if (ConnectedSessions.Count() >= max_connections || token != authtoken)
             {
-                await Clients.Caller.SendAsync("Refused", "Conection Refused", "Max Connections Exausted");
+                await Clients.Caller.SendAsync("Refused", "Connection Refused", "Max Connections Exausted");
                 await base.OnDisconnectedAsync(null);
                 Context.Abort();
                 return;
@@ -67,7 +77,7 @@ namespace SignalRMySQLQueue.Hubs
                 {
                     lock (ConnectedSessions)
                     {
-                        ConnectedSessions.Add(new Session() { ConnectionId = id, SessionId = SessionId, Time = DateTimeOffset.Now.ToUnixTimeMilliseconds(), Context = Context });
+                        ConnectedSessions.Add(new Session() { ConnectionId = id, SessionId = SessionId, Time = DateTimeOffset.Now.ToUnixTimeMilliseconds(), Context = Context, Finished = false, Disposable = true });
                     }
                 }
                 else
@@ -84,12 +94,12 @@ namespace SignalRMySQLQueue.Hubs
                     CurrentSession.Context = Context;
                 }
 
-                await Clients.Caller.SendAsync("Accepted", "Conection Accepted", id);
+                await Clients.Caller.SendAsync("Accepted", "Connection Accepted", id);
 
             }
             catch (Exception err)
             {
-                await Clients.Caller.SendAsync("ConnectionError", "Conection Error", err.Message);
+                await Clients.Caller.SendAsync("ConnectionError", "Connection Error", err.Message);
             }
         }
 
@@ -136,7 +146,7 @@ namespace SignalRMySQLQueue.Hubs
 
 
             Queue.Add(new Queue() { hash = hash, query = query, parms = parms, priority = priority });
-            tm.AddFunction(Proc, (object)Clients);
+            tm.AddFunction(Proc, new Client(){ Clients = Clients, Session = CurrentSession });
         }
 
 
@@ -156,10 +166,12 @@ namespace SignalRMySQLQueue.Hubs
         {
             try
             {
-
+                Session CurrentSession = ConnectedSessions.Where(x => x.ConnectionId == Context.ConnectionId).FirstOrDefault();
+                CurrentSession.Finished = false;
                 DataSet ds = Data.Query(query, new string[] { });
                 string o = JsonConvert.SerializeObject(ds);
                 await Clients.Caller.SendAsync("QuerySuccess", hash, o);
+                CurrentSession.Finished = true;
             }
             catch (Exception err)
             {
@@ -188,15 +200,18 @@ namespace SignalRMySQLQueue.Hubs
 
                     if (_queue != null)
                     {
+                        ((Client)args).Session.Finished = false;
                         DataSet ds = Data.Query(_queue.query, _queue.parms);
                         string o = JsonConvert.SerializeObject(ds);
-                        ((IHubCallerClients)args).Caller.SendAsync("QuerySuccess", _queue.hash, o);
+                        ((Client)args).Clients.Caller.SendAsync("QuerySuccess", _queue.hash, o);
+                        ((Client)args).Session.Finished = true;
                     }
                 }
             }
             catch (Exception err)
             {
-                ((IHubCallerClients)args).Caller.SendAsync("QueryError", _queue.hash, err.Message);
+                ((Client)args).Clients.Caller.SendAsync("QueryError", _queue.hash, err.Message);
+                ((Client)args).Session.Finished = true;
             }
 
 
@@ -213,6 +228,8 @@ namespace SignalRMySQLQueue.Hubs
         public string SessionId { get; set; }
         public long Time { get; set; }
         public HubCallerContext Context { get; set; }
+        public bool Disposable { get; set; }
+        public bool Finished { get; set; }
     }
 
 
